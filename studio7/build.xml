@@ -1,0 +1,135 @@
+<project name="studio7" default="run" basedir=".">
+
+
+	<!--
+	   $Id: build.xml 20 2010-05-26 14:21:34Z cytron $
+	-->
+
+
+	<property name="src.dir" value="src"/>
+	<property name="build.dir" value="bin"/>
+	<property name="autogen.src" value="src/autogen"/>
+	<property name="autogen.log" value="autogen"/>
+	<property name="toolpath" value="./Tools/" />
+
+	<taskdef resource="net/sf/antcontrib/antcontrib.properties">
+		<classpath>
+			<pathelement location="Tools/ant-contrib-0.6.jar" />
+		</classpath>
+	</taskdef>
+
+
+	<target name="run" depends="buildall">
+		<java classname="studio7.Main" fork="true" failonerror="true">
+			<classpath>
+				<pathelement path="${build.dir}"/>
+				<pathelement location="${cup.jar}"/>
+			</classpath>
+		</java>
+	</target>
+
+	<target name="clean">
+		<delete dir="${autogen.log}"/>
+		<delete dir="${autogen.src}"/>
+		<delete dir="${build.dir}"/>
+	</target>
+
+	<target name="setup">
+		<mkdir dir="${autogen.log}"/>
+		<mkdir dir="${autogen.src}"/>
+		<mkdir dir="${build.dir}"/>
+	</target>
+
+	<!-- You should not need to change anything below this line -->
+
+	<property name="cup.jar" value="${toolpath}/java-cup-11a.jar" />
+	<property name="jflex.jar" value="${toolpath}/JFlex.jar" />
+	<property name="makesymstring.jar" value="${toolpath}/makesymstring.jar" />
+
+	<target name="genfromcup" depends="genParser">
+		<fail message="Internal target, cannot be called from outside" unless="cupfile" />
+		<echo level="info" message="Generating ${cupfile}" />
+	</target>
+
+	<target name="buildall">
+	     <foreach list="cup1a,cup1b,cup2,cup3,cup4"
+	              inheritall="true"
+	              delimiter=","  trim="true"
+	              param="cupfile" 
+	              target="genfromcup">
+	     </foreach>
+		 <antcall target="build" />
+	</target>
+
+	<target name="build" depends="genScanner,refreshScanner,setup">
+		<javac destdir="${build.dir}" debug="true" failonerror="true" includeantruntime="false">
+			<src path="${src.dir}"/>
+			<classpath>
+				<pathelement location="${cup.jar}"/>
+				<pathelement location="${jflex.jar}"/>
+			</classpath>
+		</javac>
+	</target>
+	<target name="genParser.depend">
+		<uptodate property="genParser.uptodate" targetfile="${autogen.src}/Parser${cupfile}.java">
+			<srcfiles file="${cupfile}"/>
+			<srcfiles file="terms"/>
+		</uptodate>
+	</target>
+	<target name="genParser" depends="setup,genParser.depend" unless="genParser.uptodate">
+		<concat destfile="${autogen.log}/${cupfile}.in">
+			<fileset file="terms"/>
+			<fileset file="${cupfile}"/>
+		</concat>
+		<echo level="info" message="Processing CUP file ${cupfile}, output sent to autogen/${cupfile}.states"/>
+		<java jar="${cup.jar}" fork="true" failonerror="false" output="${autogen.log}/${cupfile}.states">
+			<arg value="-destdir"/>
+			<arg value="${autogen.src}"/>
+			<arg value="-parser"/>
+			<arg value="Parser${cupfile}"/>
+			<arg value="-nowarn"/>
+			<arg value="-dump_states"/>
+			<arg value="${autogen.log}/${cupfile}.in"/>
+		</java>
+		<java jar="${makesymstring.jar}" input="${autogen.src}/sym.java" output="${autogen.src}/symString.java" fork="true" failonerror="true"/>
+	</target>
+	<target name="refreshScanner" unless="scanner.fresh">
+		<touch file="${autogen.src}/Yylex.java"/>
+	</target>
+	<target name="genScanner.depend">
+		<condition property="genScanner.uptodate">
+			<uptodate srcfile="scanner.jflex" targetfile="${autogen.src}/Yylex.java"/>
+		</condition>
+		<!--
+
+               The following condition tests whether the contents of symString has
+               changed, in which case we must force a recomile of Yylex.java by touching it.
+
+               The reason for this is that the sym.java file contains final static constants that
+               are not mentioned by name in Yylex.class, but are instead "optimized" by using
+               their values directly.  The <javac> task has no idea that Yylex depends on sym.
+
+               Why didn't we just test sym.java? It changes everytime CUP runs, thanks to
+               a time-sensitive comment at the top.  The symString.java file does not have
+               such a comment, but it changes in concert with sym.java.
+
+               The symString.bak file is a record of symString.java the last time Yylex was
+               compiled.  If symString.bak != symString.java, then we should recompile Yylex.java
+
+        -->
+		<condition property="scanner.fresh">
+			<filesmatch file1="${autogen.src}/symString.java" file2="${autogen.log}/symString.bak"/>
+		</condition>
+	</target>
+	<target name="genScanner" depends="setup,genScanner.depend" unless="genScanner.uptodate">
+		<java jar="${jflex.jar}" fork="true" failonerror="true">
+			<arg value="-d"/>
+			<arg value="${autogen.src}"/>
+			<arg value="-nobak"/>
+			<arg value="scanner.jflex"/>
+		</java>
+		<copy file="${autogen.src}/symString.java" tofile="${autogen.log}/symString.bak" failonerror="false"/>
+	</target>
+
+
+</project>

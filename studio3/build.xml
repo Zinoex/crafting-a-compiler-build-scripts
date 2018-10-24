@@ -1,0 +1,38 @@
+<project name="studio3" default="run" basedir=".">
+	<property name = "src.dir" value = "src"/>
+	<property name = "build.dir" value = "bin"/>
+
+	<taskdef description="Translate a JFlex specification into Yylex.java" name="jflex" classname="JFlex.anttask.JFlexTask" classpath="Tools/JFlex.jar" />
+
+	<target name="run" depends="compile">
+		<java classname="autogen.Yylex" fork="true" failonerror="true" logError="true">
+			<arg value="TestFiles/input" />
+			<classpath>
+				<pathelement path="${build.dir}" />
+			</classpath>
+		</java>
+	</target>
+
+	<target name="clean">
+		<delete>
+			<fileset dir="." includes="**/*.class" />
+		</delete>
+		<delete file="studio3.zip" />
+		<delete dir="src/autogen" />
+	</target>
+
+	<target name="genScanner" depends="genScanner.depend" unless="genScanner.upToDate">
+		<jflex file="studio3.jflex" destdir="src" nobak="true" />
+	</target>
+
+	<target name="compile" depends="genScanner">
+		<javac destdir="${build.dir}" debug = "true" failonerror = "true">
+			<src path="${src.dir}"/>
+		</javac>
+	</target>
+
+	<target name="genScanner.depend">
+		<uptodate property="genScanner.upToDate" targetfile="Lexer.java" srcfile="studio3.jflex" />
+	</target>
+
+</project>
